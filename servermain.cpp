@@ -10,7 +10,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <math.h>
-/* You will to add includes here */
+#include <calcLib.h>
+
+using namespace std;
 
 #define PORT 4950
 #define MAXDATASIZE 256
@@ -47,12 +49,9 @@ char *get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
   return s;
 }
 
-#include <calcLib.h>
-
-using namespace std;
-
 int main(int argc, char *argv[])
 {
+  // 初始化变量
   int listenfd;
   int connfd;
   int numbytes;
@@ -71,21 +70,25 @@ int main(int argc, char *argv[])
 
   socklen_t clientAddressLength;
 
+  // 定义操作符数组
   string arith[] = {"add", "div", "mul", "sub", "fadd", "fdiv", "fmul", "fsub"};
 
+  // 创建socket
   listenfd = socket(AF_INET, SOCK_STREAM, 0);
   memset(&serverAddress, 0, sizeof(serverAddress));
   serverAddress.sin_family = AF_INET;
   serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
   serverAddress.sin_port = htons(PORT);
-
+  // 绑定本地端口
   bind(listenfd, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
+  // 将socket变为被动连接的socket
   listen(listenfd, 1);
   printf("Listening on port %d \n", PORT);
   while (1)
   {
     printf("\n*****server waiting for new client connection:*****\n");
     clientAddressLength = sizeof(clientAddress);
+    // 取出第一个已经完成了的连接
     connfd = accept(listenfd, (struct sockaddr *)&clientAddress, &clientAddressLength);
     printf("accept = %d \n", connfd);
     printf("listener: got packet from %s:%d\n",
@@ -94,9 +97,12 @@ int main(int argc, char *argv[])
                      s, sizeof s),
            ntohs(clientAddress.sin_port));
     printf("Send header to Client\n");
+    // 发送确认连接报文
     send(connfd, "TEXT TCP 1.0\n", sizeof("TEXT TCP 1.0\n"), 0);
+    // 接收来自客户端的OK报文
     numbytes = recv(connfd, buf, MAXDATASIZE, 0);
     string res;
+    // 根据\n切割接收到的报文
     for (int i = 0; i <= numbytes; i++)
     {
       if (buf[i] == '\n')
@@ -105,10 +111,13 @@ int main(int argc, char *argv[])
         break;
       }
     }
+    // 对接收到的客户端报文进行判断
     if (res == "OK")
     {
       printf("Receive OK from Client\n");
+      // 初始化随机库
       initCalcLib();
+      // 随机生成数字类型
       ptr = randomType();
       char s[MAXDATASIZE];
       string option;
@@ -118,6 +127,7 @@ int main(int argc, char *argv[])
         option = arith[index];
         double f1 = randomFloat();
         double f2 = randomFloat();
+        // 保证除数不为零
         while (f2 == 0.0f)
         {
           f2 = randomFloat();
@@ -145,6 +155,7 @@ int main(int argc, char *argv[])
         option = arith[index];
         int i1 = randomInt();
         int i2 = randomInt();
+        // 保证除数不为零
         while (i2 == 0)
         {
           i2 = randomInt();
@@ -167,10 +178,13 @@ int main(int argc, char *argv[])
         sprintf(s, "%s %d %d\n", option.c_str(), i1, i2);
       }
       printf("Send option %s to Client\n", s);
+      // 发送生成的运算字符串
       send(connfd, s, sizeof(s), 0);
+      // 接收来自客户端的运算结果
       numbytes = recv(connfd, msg, MAXDATASIZE, 0);
       printf("Receive result %s from Client\n", msg);
       printf("My result is %f\n", result);
+      // 对运算结果进行比较
       if (fabs(stod(msg) - result) < 0.00001)
       {
         send(connfd, "OK", sizeof("OK"), 0);
@@ -179,8 +193,10 @@ int main(int argc, char *argv[])
       {
         send(connfd, "ERROR", sizeof("ERROR"), 0);
       }
+      // 关闭对此次客户端的连接
       close(connfd);
     }
   }
+  close(listenfd);
   return 0;
 }
